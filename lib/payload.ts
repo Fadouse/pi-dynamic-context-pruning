@@ -62,6 +62,7 @@ function makeBlockMessage(block: DcpBlock): PayloadMessage {
   return {
     role: "user",
     content: `<dcp-compressed-block id=\"${block.id}\" n=\"${block.displayId}\" source=\"${block.source}\" topic=\"${escapeXml(block.topic)}\" range=\"${block.startId}-${block.endId}\">\n${block.summary}\n</dcp-compressed-block>`,
+    timestamp: Date.now(),
   };
 }
 

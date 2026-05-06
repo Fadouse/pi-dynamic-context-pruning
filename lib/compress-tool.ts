@@ -30,10 +30,10 @@ function activeRangeOverlap(state: DcpState, start: DcpMessageRef, end: DcpMessa
   });
 }
 
-function protectedSummary(messages: DcpMessageRef[], config: DcpConfig): string {
+function protectedRangeReason(messages: DcpMessageRef[], config: DcpConfig): string | undefined {
   const protectedMessages = messages.filter((m) => isToolProtected(m, config.compress.protectedTools) || isFileProtected(m, config.protectedFilePatterns));
-  if (!protectedMessages.length) return "";
-  return `\n\nProtected content preserved by DCP metadata:\n${protectedMessages.map((m) => `- ${m.id}: role=${m.role}${m.toolName ? ` tool=${m.toolName}` : ""}${m.filePath ? ` file=${m.filePath}` : ""} (~${m.tokensApprox} tokens)`).join("\n")}`;
+  if (!protectedMessages.length) return undefined;
+  return protectedMessages.map((m) => `${m.id}${m.toolName ? ` tool=${m.toolName}` : ""}${m.filePath ? ` file=${m.filePath}` : ""}`).join(", ");
 }
 
 export function applyCompression(state: DcpState, args: CompressArgs, config: DcpConfig): { text: string; blocks: DcpBlock[] } {
@@ -54,9 +54,13 @@ export function applyCompression(state: DcpState, args: CompressArgs, config: Dc
     if (config.compress.protectUserMessages && rangeMessages.some((m) => m.role === "user")) {
       throw new Error(`DCP range ${item.startId}-${item.endId} includes user messages; choose assistant/tool context or set compress.protectUserMessages=false.`);
     }
+    const protectedReason = protectedRangeReason(rangeMessages, config);
+    if (protectedReason) {
+      throw new Error(`DCP range ${item.startId}-${item.endId} includes protected Pi tool/file messages: ${protectedReason}. Choose a range that excludes protected tool outputs.`);
+    }
 
     const compressedTokensApprox = rangeMessages.reduce((sum, m) => sum + m.tokensApprox, 0);
-    const summary = `${item.summary}${protectedSummary(rangeMessages, config)}`;
+    const summary = item.summary;
     const block: DcpBlock = {
       id: formatBlockId(state.nextBlockNumber++),
       displayId: state.blocks.length + blocks.length + 1,

@@ -19,10 +19,16 @@ function modelKey(ctx: ExtensionContext): string | undefined {
   return `${model.provider ?? model.providerId ?? model.providerID ?? "unknown"}/${model.id ?? model.modelId ?? model.modelID ?? "unknown"}`;
 }
 
+function hasDcpMarkers(payload: any): boolean {
+  return JSON.stringify(payload).includes("<dcp-message") || JSON.stringify(payload).includes("<dcp-compressed-block");
+}
+
+const DCP_SUBCOMMANDS = ["help", "context", "stats", "compress", "decompress", "recompress", "manual", "auto", "threshold", "sweep"];
+
 /**
  * Pi Dynamic Context Pruning entrypoint. Pi sessions stay immutable; this extension
- * builds a reversible DCP view by rewriting provider payloads immediately before
- * OpenAI/Anthropic-compatible requests are sent.
+ * builds a reversible DCP view in the `context` event, before Pi serializes the
+ * messages for OpenAI/Anthropic-compatible providers.
  */
 export default function piDynamicContextPruning(pi: ExtensionAPI) {
   const cwd = process.cwd();
@@ -36,22 +42,10 @@ export default function piDynamicContextPruning(pi: ExtensionAPI) {
 
   const persist = () => saveState(stateFile, state);
 
-  pi.on("before_agent_start", async (event) => {
-    return { systemPrompt: `${event.systemPrompt}${systemPromptExtension(prompts)}` };
-  });
-
-  pi.on("turn_start", () => {
-    state.runtime.turn++;
-    persist();
-  });
-
-  pi.on("before_provider_request", (event, ctx) => {
-    logger.payload(event.payload);
-    if (event.payload && Array.isArray((event.payload as any).messages)) {
-      syncMessageRefs(state, (event.payload as any).messages);
-      const strategyBlocks = applyAutomaticStrategies(state, config);
-      if (strategyBlocks.length) logger.debug("automatic strategies created blocks", strategyBlocks);
-    }
+  const buildDcpContext = (messages: any[], ctx: ExtensionContext) => {
+    syncMessageRefs(state, messages as any);
+    const strategyBlocks = applyAutomaticStrategies(state, config);
+    if (strategyBlocks.length) logger.debug("automatic strategies created blocks", strategyBlocks);
 
     const usage = ctx.getContextUsage();
     const nudge = chooseNudge(state, config, prompts, usage, modelKey(ctx));
@@ -63,9 +57,35 @@ export default function piDynamicContextPruning(pi: ExtensionAPI) {
       notify(ctx, `DCP: ${nudge.kind} nudge at ${usage?.percent?.toFixed(1) ?? "unknown"}% (${usage?.tokens?.toLocaleString() ?? "unknown"} / ${usage?.contextWindow.toLocaleString() ?? "unknown"}).`, usage?.percent != null && usage.percent >= config.autoCompress.hardLimitPercent ? "warning" : "info");
     }
 
-    const result = preparePayload(event.payload, state, nudge.text);
-    if (result.changed || nudge.text) {
-      persist();
+    const carrier = { messages };
+    const result = preparePayload(carrier, state, nudge.text);
+    persist();
+    return result.changed ? carrier.messages : messages;
+  };
+
+  pi.on("before_agent_start", async (event) => {
+    return { systemPrompt: `${event.systemPrompt}${systemPromptExtension(prompts)}` };
+  });
+
+  pi.on("turn_start", () => {
+    state.runtime.turn++;
+    persist();
+  });
+
+  // Primary DCP hook. This modifies Pi's normalized messages, so the model can
+  // actually see <dcp-message id="..."> ranges before provider serialization.
+  pi.on("context", async (event, ctx) => {
+    return { messages: buildDcpContext(event.messages as any[], ctx) };
+  });
+
+  // Fallback/debug hook. Normally the context hook has already inserted DCP
+  // markers; if not, this handles providers that bypass context transformation.
+  pi.on("before_provider_request", (event, ctx) => {
+    logger.payload(event.payload);
+    if (hasDcpMarkers(event.payload)) return;
+    if (event.payload && Array.isArray((event.payload as any).messages)) {
+      const messages = buildDcpContext((event.payload as any).messages, ctx);
+      (event.payload as any).messages = messages;
       return event.payload;
     }
   });
@@ -85,6 +105,30 @@ export default function piDynamicContextPruning(pi: ExtensionAPI) {
   if (config.commands.enabled) {
     pi.registerCommand("dcp", {
       description: "Dynamic Context Pruning commands",
+      getArgumentCompletions: (prefix: string) => {
+        const parts = prefix.trimStart().split(/\s+/);
+        const first = parts[0] ?? "";
+        if (!prefix.includes(" ")) {
+          const items = DCP_SUBCOMMANDS.filter((cmd) => cmd.startsWith(first)).map((cmd) => ({ value: cmd, label: cmd }));
+          return items.length ? items : null;
+        }
+        const sub = first.toLowerCase();
+        const argPrefix = parts[parts.length - 1] ?? "";
+        if (sub === "manual" || sub === "auto") {
+          const items = ["on", "off"].filter((v) => v.startsWith(argPrefix)).map((v) => ({ value: v, label: v }));
+          return items.length ? items : null;
+        }
+        if (sub === "decompress" || sub === "recompress") {
+          const wantActive = sub === "decompress";
+          const items = state.blocks
+            .filter((b) => b.active === wantActive)
+            .flatMap((b) => [String(b.displayId), b.id])
+            .filter((v) => v.startsWith(argPrefix))
+            .map((v) => ({ value: v, label: v }));
+          return items.length ? items : null;
+        }
+        return null;
+      },
       handler: async (args, ctx) => {
         const [subRaw = "help", ...rest] = args.trim().split(/\s+/).filter(Boolean);
         const sub = subRaw.toLowerCase();
