@@ -8,6 +8,7 @@ import { preparePayload, syncMessageRefs } from "./lib/payload.js";
 import { PromptStore } from "./lib/prompts.js";
 import { loadState, saveState } from "./lib/state.js";
 import { applyAutomaticStrategies } from "./lib/strategies.js";
+import { stripDcpMarkupFromContent } from "./lib/strip.js";
 
 function notify(ctx: ExtensionContext, message: string, level: "info" | "warning" | "error" = "info") {
   if (ctx.hasUI) ctx.ui.notify(message, level);
@@ -88,6 +89,15 @@ export default function piDynamicContextPruning(pi: ExtensionAPI) {
       (event.payload as any).messages = messages;
       return event.payload;
     }
+  });
+
+  // Safety net: if a model parrots DCP XML metadata, remove it from the final
+  // assistant message saved/displayed by Pi. The system prompt also forbids this,
+  // but stripping protects users from provider/model mistakes.
+  pi.on("message_end", async (event) => {
+    if (event.message.role !== "assistant") return;
+    const next = { ...event.message, content: stripDcpMarkupFromContent((event.message as any).content) } as any;
+    return { message: next };
   });
 
   pi.registerTool({
