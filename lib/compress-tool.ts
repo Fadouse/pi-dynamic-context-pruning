@@ -30,10 +30,32 @@ function activeRangeOverlap(state: DcpState, start: DcpMessageRef, end: DcpMessa
   });
 }
 
-function protectedRangeReason(messages: DcpMessageRef[], config: DcpConfig): string | undefined {
+function fence(text: string | undefined): string {
+  const value = text?.trim() || "(no text captured)";
+  return value.includes("```") ? value.replace(/```/g, "`\u200b``") : value;
+}
+
+/**
+ * OpenCode DCP's compress.protectedTools does not mean "forbid compressing
+ * these messages". It means their outputs are environment-managed and appended
+ * to the stored summary when a selected compression range contains them.
+ */
+function appendProtectedContent(summary: string, messages: DcpMessageRef[], config: DcpConfig): string {
+  const sections: string[] = [];
+
+  if (config.compress.protectUserMessages) {
+    const users = messages.filter((m) => m.role === "user");
+    if (users.length) {
+      sections.push(`\n\nThe following user messages were preserved verbatim during compression:\n${users.map((m) => `\n### ${m.id} user\n${fence(m.text)}`).join("\n")}`);
+    }
+  }
+
   const protectedMessages = messages.filter((m) => isToolProtected(m, config.compress.protectedTools) || isFileProtected(m, config.protectedFilePatterns));
-  if (!protectedMessages.length) return undefined;
-  return protectedMessages.map((m) => `${m.id}${m.toolName ? ` tool=${m.toolName}` : ""}${m.filePath ? ` file=${m.filePath}` : ""}`).join(", ");
+  if (protectedMessages.length) {
+    sections.push(`\n\nThe following protected tool/file outputs were used in this conversation as well and are preserved verbatim:\n${protectedMessages.map((m) => `\n### ${m.id} ${m.toolName ? `tool: ${m.toolName}` : m.role}${m.filePath ? ` (${m.filePath})` : ""}\n${fence(m.text)}`).join("\n")}`);
+  }
+
+  return sections.length ? `${summary}${sections.join("")}` : summary;
 }
 
 export function applyCompression(state: DcpState, args: CompressArgs, config: DcpConfig): { text: string; blocks: DcpBlock[] } {
@@ -51,16 +73,8 @@ export function applyCompression(state: DcpState, args: CompressArgs, config: Dc
     if (overlap) throw new Error(`DCP range ${item.startId}-${item.endId} overlaps active block ${overlap.id}. Decompress or choose a non-overlapping range.`);
 
     const rangeMessages = state.messages.filter((m) => m.index >= start.index && m.index <= end.index);
-    if (config.compress.protectUserMessages && rangeMessages.some((m) => m.role === "user")) {
-      throw new Error(`DCP range ${item.startId}-${item.endId} includes user messages; choose assistant/tool context or set compress.protectUserMessages=false.`);
-    }
-    const protectedReason = protectedRangeReason(rangeMessages, config);
-    if (protectedReason) {
-      throw new Error(`DCP range ${item.startId}-${item.endId} includes protected Pi tool/file messages: ${protectedReason}. Choose a range that excludes protected tool outputs.`);
-    }
-
     const compressedTokensApprox = rangeMessages.reduce((sum, m) => sum + m.tokensApprox, 0);
-    const summary = item.summary;
+    const summary = appendProtectedContent(item.summary, rangeMessages, config);
     const block: DcpBlock = {
       id: formatBlockId(state.nextBlockNumber++),
       displayId: state.blocks.length + blocks.length + 1,

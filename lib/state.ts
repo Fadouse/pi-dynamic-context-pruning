@@ -10,6 +10,7 @@ export interface DcpMessageRef {
   toolName?: string;
   filePath?: string;
   errorLike?: boolean;
+  text?: string;
   turn: number;
 }
 

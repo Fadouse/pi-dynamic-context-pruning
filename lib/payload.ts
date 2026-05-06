@@ -101,8 +101,8 @@ export function syncMessageRefs(state: DcpState, rawMessages: PayloadMessage[]):
     const hash = hashText(`${role}\n${text}`);
     const existing = findExistingByHash(state, hash, index, usedIds);
     const ref: DcpMessageRef = existing
-      ? { ...existing, index, role, tokensApprox: approxTokens(text), turn: state.runtime.turn }
-      : { id: formatMessageId(state.nextMessageNumber++), index, role, hash, tokensApprox: approxTokens(text), turn: state.runtime.turn };
+      ? { ...existing, index, role, tokensApprox: approxTokens(text), text, turn: state.runtime.turn }
+      : { id: formatMessageId(state.nextMessageNumber++), index, role, hash, tokensApprox: approxTokens(text), text, turn: state.runtime.turn };
     ref.toolName = detectToolName(message, text);
     ref.filePath = detectFilePath(text);
     ref.errorLike = isErrorLike(text);
