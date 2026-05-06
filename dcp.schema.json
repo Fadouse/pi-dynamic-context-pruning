@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pi Dynamic Context Pruning Config",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "enabled": { "type": "boolean", "default": true },
+    "debug": { "type": "boolean", "default": false },
+    "logProviderPayloads": { "type": "boolean", "default": false },
+    "pruneNotification": { "enum": ["off", "minimal", "detailed"], "default": "detailed" },
+    "commands": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "protectedTools": { "type": "array", "items": { "type": "string" }, "default": [] }
+      }
+    },
+    "manualMode": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "automaticStrategies": { "type": "boolean", "default": true }
+      }
+    },
+    "turnProtection": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "turns": { "type": "integer", "minimum": 1, "default": 4 }
+      }
+    },
+    "experimental": {
+      "type": "object",
+      "properties": {
+        "customPrompts": { "type": "boolean", "default": false },
+        "messageMode": { "type": "boolean", "default": true }
+      }
+    },
+    "protectedFilePatterns": { "type": "array", "items": { "type": "string" }, "default": [] },
+    "autoCompress": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "thresholdPercent": { "type": "number", "minimum": 1, "maximum": 99, "default": 75 },
+        "hardLimitPercent": { "type": "number", "minimum": 2, "maximum": 100, "default": 95 },
+        "minContextPercent": { "type": "number", "minimum": 1, "maximum": 99, "default": 50 },
+        "nudgeFrequency": { "type": "integer", "minimum": 1, "default": 1 },
+        "iterationNudgeThreshold": { "type": "integer", "minimum": 1, "default": 15 },
+        "nudgeForce": { "enum": ["soft", "strong"], "default": "soft" },
+        "summaryBuffer": { "type": "boolean", "default": true },
+        "modelThresholds": { "type": "object", "additionalProperties": { "type": "object" }, "default": {} }
+      }
+    },
+    "compress": {
+      "type": "object",
+      "properties": {
+        "mode": { "enum": ["range", "message"], "default": "range" },
+        "showCompression": { "type": "boolean", "default": true },
+        "summaryBuffer": { "type": "boolean", "default": true },
+        "protectedTools": { "type": "array", "items": { "type": "string" }, "default": ["read", "bash", "edit", "write", "grep", "find", "ls"] },
+        "protectUserMessages": { "type": "boolean", "default": true }
+      }
+    },
+    "strategies": {
+      "type": "object",
+      "properties": {
+        "deduplication": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "protectedTools": { "type": "array", "items": { "type": "string" }, "default": [] }
+          }
+        },
+        "purgeErrors": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "turns": { "type": "integer", "minimum": 1, "default": 4 },
+            "protectedTools": { "type": "array", "items": { "type": "string" }, "default": [] }
+          }
+        }
+      }
+    }
+  }
+}

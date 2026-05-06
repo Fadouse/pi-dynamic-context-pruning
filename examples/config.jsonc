@@ -1,0 +1,163 @@
+{
+  // JSON schema for editor completion and validation.
+  "$schema": "../dcp.schema.json",
+
+  // Master switch. When false, the extension returns without registering tools,
+  // commands, or hooks.
+  "enabled": true,
+
+  // Write internal debug events to .pi/dcp/logs/debug.log.
+  "debug": false,
+
+  // Write raw provider payload snapshots to .pi/dcp/logs/provider-*.json.
+  // This is useful when validating OpenAI/Anthropic/OAuth payload shapes, but it
+  // may contain conversation content and secrets, so keep it disabled normally.
+  "logProviderPayloads": false,
+
+  // Notification verbosity. Pi currently displays these through ctx.ui.notify().
+  // "off" is reserved for quiet mode, "minimal" for concise status, and
+  // "detailed" for full status text.
+  "pruneNotification": "detailed",
+
+  // Slash-command configuration for /dcp commands.
+  "commands": {
+    // Register the /dcp command group.
+    "enabled": true,
+
+    // Extra tool names or glob patterns protected from /dcp sweep.
+    // Pi built-in tools are already protected by default:
+    // read, bash, edit, write, grep, find, ls.
+    "protectedTools": []
+  },
+
+  // Manual mode disables autonomous DCP nudges. The user can still run
+  // /dcp compress, /dcp sweep, /dcp decompress, etc.
+  "manualMode": {
+    // Start with manual mode enabled.
+    "enabled": false,
+
+    // If manual mode is on, keep automatic cleanup strategies running anyway.
+    // Set false if manual mode should disable deduplication and purgeErrors too.
+    "automaticStrategies": true
+  },
+
+  // Protect recent errored tool/result messages from purgeErrors.
+  "turnProtection": {
+    // When enabled, purgeErrors will not hide messages from the last N turns.
+    "enabled": false,
+
+    // Number of recent turns protected from purgeErrors.
+    "turns": 4
+  },
+
+  // Experimental or compatibility switches that are implemented in Pi DCP.
+  "experimental": {
+    // When true, prompt files are created/read from .pi/dcp/prompts/*.md.
+    "customPrompts": false,
+
+    // Message-level compression is represented by normal range compression with
+    // startId === endId. Keep this enabled for OpenCode DCP config parity.
+    "messageMode": true
+  },
+
+  // File path glob patterns protected from sweep, deduplication, purgeErrors,
+  // and compression metadata handling when a path can be detected from tool text.
+  // Examples: ["*.env", "**/secrets/*", "**/credentials.json"]
+  "protectedFilePatterns": [],
+
+  // Automatic nudge behavior. The extension never summarizes automatically; it
+  // nudges the model to call the compress tool when thresholds are reached.
+  "autoCompress": {
+    // Enable threshold/turn/iteration nudges.
+    "enabled": true,
+
+    // Soft threshold as a percentage of the active model context window.
+    // At or above this percentage, DCP injects a context-limit reminder.
+    "thresholdPercent": 75,
+
+    // Hard threshold. The reminder becomes stronger and tells the model to
+    // compress before continuing normal work.
+    "hardLimitPercent": 95,
+
+    // Lower threshold for weaker turn/iteration reminders.
+    "minContextPercent": 50,
+
+    // Fire context-limit nudges at most once every N turns while above threshold.
+    "nudgeFrequency": 1,
+
+    // Fire iteration reminders after this many turns since the last DCP nudge
+    // while above minContextPercent.
+    "iterationNudgeThreshold": 15,
+
+    // "soft" means only threshold and iteration reminders. "strong" also emits
+    // a turn reminder while above minContextPercent.
+    "nudgeForce": "soft",
+
+    // Kept for OpenCode DCP config parity. Pi DCP records summary/pruned token
+    // stats and uses the configured thresholds directly.
+    "summaryBuffer": true,
+
+    // Optional per-model threshold overrides keyed by provider/model, e.g.
+    // "anthropic/claude-sonnet-4" or "openai/gpt-5".
+    "modelThresholds": {
+      // "anthropic/claude-sonnet-4": {
+      //   "thresholdPercent": 70,
+      //   "hardLimitPercent": 92,
+      //   "minContextPercent": 45
+      // }
+    }
+  },
+
+  // compress tool behavior.
+  "compress": {
+    // "range" is the primary DCP mode. "message" is treated as range mode with
+    // startId === endId for Pi compatibility.
+    "mode": "range",
+
+    // Include compression details in tool results and stats.
+    "showCompression": true,
+
+    // Kept for OpenCode DCP config parity; summary/pruned stats are tracked.
+    "summaryBuffer": true,
+
+    // Tool names whose outputs should not be silently lost when included in a
+    // compression range. Pi built-ins are protected by default to avoid hiding
+    // important file edits, reads, searches, and shell outputs:
+    // read, bash, edit, write, grep, find, ls.
+    "protectedTools": [
+      "read",
+      "bash",
+      "edit",
+      "write",
+      "grep",
+      "find",
+      "ls"
+    ],
+
+    // Reject model-proposed compression ranges that contain user messages.
+    "protectUserMessages": true
+  },
+
+  // Automatic cleanup strategies. They create reversible DCP blocks; they do not
+  // delete or rewrite Pi session files.
+  "strategies": {
+    // Hide duplicate tool/function result messages.
+    "deduplication": {
+      "enabled": true,
+
+      // Extra protected tool names or glob patterns excluded from deduplication.
+      "protectedTools": []
+    },
+
+    // Hide old errored tool/result messages after N turns.
+    "purgeErrors": {
+      "enabled": true,
+
+      // Number of turns to wait before hiding an errored result.
+      "turns": 4,
+
+      // Extra protected tool names or glob patterns excluded from purgeErrors.
+      "protectedTools": []
+    }
+  }
+}
